@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Таймеры</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --ground:#EFF0F4;
+    --panel:#FFFFFF;
+    --ink:#15171E;
+    --muted:#666E82;
+    --faint:#98A0B2;
+    --line:#DBDDE6;
+    --line-soft:#E6E8EF;
+    --accent:#3B44E0;
+    --accent-ink:#FFFFFF;
+    --accent-soft:#E5E7FC;
+    --danger:#B3261E;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --pad: clamp(20px, 5vw, 48px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ground:#0E1016;
+      --panel:#171A24;
+      --ink:#E9EBF2;
+      --muted:#98A0B4;
+      --faint:#69718A;
+      --line:#252A3A;
+      --line-soft:#1D2130;
+      --accent:#8E96FF;
+      --accent-ink:#10121A;
+      --accent-soft:#1C2136;
+      --danger:#F2857C;
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#EFF0F4; --panel:#FFFFFF; --ink:#15171E; --muted:#666E82; --faint:#98A0B2;
+    --line:#DBDDE6; --line-soft:#E6E8EF; --accent:#3B44E0; --accent-ink:#FFFFFF;
+    --accent-soft:#E5E7FC; --danger:#B3261E;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0E1016; --panel:#171A24; --ink:#E9EBF2; --muted:#98A0B4; --faint:#69718A;
+    --line:#252A3A; --line-soft:#1D2130; --accent:#8E96FF; --accent-ink:#10121A;
+    --accent-soft:#1C2136; --danger:#F2857C;
+  }
+
+  body{
+    margin:0;
+    background:var(--ground);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:15px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  *:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:2px; }
+
+  .board{
+    max-width:720px;
+    margin:0 auto;
+    padding:var(--pad) var(--pad) 96px;
+    display:flex;
+    flex-direction:column;
+    gap:clamp(28px, 5vw, 44px);
+  }
+
+  /* --- header --- */
+  .top{ display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  h1{
+    margin:0; font-size:12px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.24em; color:var(--ink);
+  }
+  .now{ font-size:12px; color:var(--faint); letter-spacing:.06em; font-variant-numeric:tabular-nums; }
+  .now .blink{ animation:blink 2s steps(1,end) infinite; }
+  @keyframes blink{ 50%{ opacity:.25 } }
+
+  /* --- admin toolbar --- */
+  .tools{ display:none; gap:8px; flex-wrap:wrap; margin-top:14px; width:100%; }
+  .is-admin .tools{ display:flex; }
+  .tools button{
+    font:inherit; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); background:transparent; border:1px solid var(--line);
+    padding:7px 12px; border-radius:999px; cursor:pointer;
+    transition:color .15s, border-color .15s, background .15s;
+  }
+  .tools button:hover{ color:var(--ink); border-color:var(--muted); }
+  .tools button.primary{ color:var(--accent); border-color:var(--accent); }
+  .tools button.primary:hover{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+
+  /* --- sections --- */
+  section{ display:flex; flex-direction:column; }
+  section[hidden]{ display:none; }
+  .sect{
+    margin:0 0 4px; font-size:10px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.24em; color:var(--faint);
+    display:flex; align-items:center; gap:12px;
+  }
+  .sect::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  ul.rows{ list-style:none; margin:0; padding:0; }
+
+  .row{
+    display:grid;
+    grid-template-columns:1fr auto;
+    align-items:baseline;
+    gap:6px 24px;
+    padding:18px 0;
+    border-bottom:1px solid var(--line-soft);
+    animation:rise .5s cubic-bezier(.2,.7,.3,1) backwards;
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(6px) } }
+  .row:last-child{ border-bottom:0; }
+
+  .name{ display:block; font-size:15px; font-weight:500; letter-spacing:-.01em; text-wrap:balance; }
+  .when{ display:block; font-size:12px; color:var(--muted); margin-top:3px; }
+  .rough{ display:block; font-size:12px; color:var(--faint); margin-top:1px; }
+
+  .figure{ text-align:right; white-space:nowrap; }
+  .num{
+    font-size:clamp(30px, 8vw, 44px); font-weight:600; letter-spacing:-.03em;
+    font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .unit{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--muted); margin-left:8px; }
+  .clock{ display:block; font-size:13px; color:var(--faint); font-variant-numeric:tabular-nums; letter-spacing:.04em; margin-top:6px; }
+  .ahead .num{ color:var(--accent); }
+  .hms .num{ font-size:clamp(24px, 6.5vw, 34px); letter-spacing:-.01em; }
+  .hms .clock{ display:none; }
+
+  .acts{ display:none; grid-column:1 / -1; gap:14px; margin-top:6px; }
+  .is-admin .acts{ display:flex; }
+  .acts button{
+    font:inherit; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    background:none; border:0; padding:0; cursor:pointer; color:var(--faint);
+    transition:color .15s;
+  }
+  .acts button:hover{ color:var(--ink); }
+  .acts button.del:hover{ color:var(--danger); }
+  .acts button.armed, .tools button.armed{ color:var(--danger); border-color:var(--danger); }
+
+  .empty{ font-size:13px; color:var(--faint); padding:18px 0; }
+
+  footer{ font-size:11px; color:var(--faint); letter-spacing:.06em; display:flex; gap:8px; align-items:center; }
+  .dot{ background:none; border:0; padding:4px; cursor:default; color:inherit; font:inherit; }
+
+  /* --- dialog --- */
+  dialog{
+    border:1px solid var(--line); border-radius:14px; padding:0;
+    background:var(--panel); color:var(--ink);
+    width:min(420px, calc(100vw - 32px));
+    box-shadow:0 24px 60px rgba(10,12,20,.22);
+  }
+  dialog::backdrop{ background:rgba(12,14,22,.5); backdrop-filter:blur(2px); }
+  form.edit{ display:flex; flex-direction:column; gap:16px; padding:22px; }
+  .dlg-title{ font-size:11px; text-transform:uppercase; letter-spacing:.2em; color:var(--faint); }
+  label{ display:flex; flex-direction:column; gap:6px; font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); }
+  input[type="text"], input[type="date"], input[type="time"]{
+    font:inherit; font-size:14px; color:var(--ink); background:var(--ground);
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px; width:100%; box-sizing:border-box;
+  }
+  .pair{ display:grid; grid-template-columns:1.4fr 1fr; gap:12px; }
+  .hint{ font-size:11px; color:var(--faint); letter-spacing:0; text-transform:none; line-height:1.45; }
+  .dlg-acts{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:2px; }
+  .dlg-acts .right{ display:flex; gap:10px; }
+  .btn{
+    font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    padding:9px 16px; border-radius:999px; cursor:pointer; border:1px solid var(--line);
+    background:transparent; color:var(--muted);
+  }
+  .btn:hover{ color:var(--ink); border-color:var(--muted); }
+  .btn.save{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.save:hover{ filter:brightness(1.08); color:var(--accent-ink); }
+
+  textarea.copybox{
+    font:inherit; font-size:12px; line-height:1.5; color:var(--ink); background:var(--ground);
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    width:100%; box-sizing:border-box; height:150px; resize:vertical;
+  }
+
+  #toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(10px);
+    background:var(--ink); color:var(--ground);
+    font-size:12px; letter-spacing:.04em; padding:9px 16px; border-radius:999px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  }
+  #toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:520px){
+    .row{ grid-template-columns:1fr; align-items:start; gap:10px; }
+    .figure{ text-align:left; }
+    .clock{ margin-top:4px; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="board">
+  <header class="top">
+    <h1>Таймеры</h1>
+    <div class="now" id="now"></div>
+    <div class="tools">
+      <button type="button" class="primary" id="addBtn">+ Добавить</button>
+      <button type="button" id="linkBtn">Ссылка</button>
+      <button type="button" id="jsonBtn">JSON</button>
+      <button type="button" id="resetBtn">Сброс</button>
+      <button type="button" id="lockBtn">Выйти</button>
+    </div>
+  </header>
+
+  <section id="secAhead">
+    <h2 class="sect">До</h2>
+    <ul class="rows" id="listAhead"></ul>
+  </section>
+
+  <section id="secPast">
+    <h2 class="sect">Прошло с</h2>
+    <ul class="rows" id="listPast"></ul>
+  </section>
+
+  <p class="empty" id="emptyAll" hidden>Пока пусто.</p>
+
+  <footer>
+    <button class="dot" id="secret" title="" aria-label="Служебная кнопка">·</button>
+    <span id="footNote"></span>
+  </footer>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" class="edit" id="editForm">
+    <div class="dlg-title" id="dlgTitle">Новый таймер</div>
+    <label>Название
+      <input type="text" id="fName" maxlength="60" required autocomplete="off" placeholder="Отпуск" />
+    </label>
+    <div class="pair">
+      <label>Дата
+        <input type="date" id="fDate" required />
+      </label>
+      <label>Время
+        <input type="time" id="fTime" />
+      </label>
+    </div>
+    <div class="hint">Время можно не указывать — тогда считаем от полуночи. Дата в прошлом сама уедет в «Прошло с».</div>
+    <div class="dlg-acts">
+      <button type="button" class="btn" id="cancelBtn">Отмена</button>
+      <div class="right">
+        <button type="submit" class="btn save" id="saveBtn">Сохранить</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="copyDlg">
+  <form method="dialog" class="edit">
+    <div class="dlg-title" id="copyTitle">Скопируй вручную</div>
+    <textarea class="copybox" id="copyBox" readonly></textarea>
+    <div class="dlg-acts">
+      <span class="hint">Выделено — жми Cmd+C или Ctrl+C.</span>
+      <div class="right"><button type="submit" class="btn">Закрыть</button></div>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* --- Опубликованные таймеры. Это то, что видят друзья по голой ссылке. --- */
+  var DEFAULTS = [
+    { n: "Новый год", d: "2027-01-01", t: null },
+    { n: "Матвей последний раз в Минске", d: "2024-10-21", t: null },
+    { n: "Последняя Копань", d: "2025-08-17", t: null }
+  ];
+
+  var KEY = "timers.v1";
+  var ADMIN_KEY = "timers.admin";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { items: [], admin: false, fromLink: false, editing: null };
+
+  /* ---------- утилиты ---------- */
+
+  function plural(n, forms) {
+    var a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return forms[2];
+    if (b > 1 && b < 5) return forms[1];
+    if (b === 1) return forms[0];
+    return forms[2];
+  }
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function tsOf(item) {
+    var p = item.d.split("-");
+    var hm = (item.t || "00:00").split(":");
+    return new Date(+p[0], +p[1] - 1, +p[2], +hm[0] || 0, +hm[1] || 0, 0, 0).getTime();
+  }
+
+  var fmtDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+  var fmtTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+  function whenText(item) {
+    var d = new Date(tsOf(item));
+    var s = fmtDate.format(d).replace(/\s*г\.$/, "");
+    if (item.t) s += ", " + fmtTime.format(d);
+    return s;
+  }
+
+  // Календарная разница, приблизительная — для строки «2 года 4 месяца».
+  function roughSpan(fromTs, toTs) {
+    var a = new Date(fromTs), b = new Date(toTs);
+    var y = b.getFullYear() - a.getFullYear();
+    var m = b.getMonth() - a.getMonth();
+    var d = b.getDate() - a.getDate();
+    if (d < 0) { m -= 1; d += new Date(b.getFullYear(), b.getMonth(), 0).getDate(); }
+    if (m < 0) { y -= 1; m += 12; }
+    var out = [];
+    if (y) out.push(y + " " + plural(y, ["год", "года", "лет"]));
+    if (m) out.push(m + " " + plural(m, ["месяц", "месяца", "месяцев"]));
+    if (!y && d) out.push(d + " " + plural(d, ["день", "дня", "дней"]));
+    return out.join(" ");
+  }
+
+  function uid() {
+    return Math.random().toString(36).slice(2, 9) + performance.now().toString(36).replace(".", "");
+  }
+
+  // Подтверждение прямо в кнопке: confirm() в песочнице артефакта может быть заблокирован.
+  function armTwoStep(btn, idle, armedLabel, run) {
+    var armed = false, timer = null;
+    function disarm() {
+      armed = false; btn.textContent = idle; btn.classList.remove("armed");
+    }
+    btn.addEventListener("click", function () {
+      if (!armed) {
+        armed = true;
+        btn.textContent = armedLabel;
+        btn.classList.add("armed");
+        clearTimeout(timer);
+        timer = setTimeout(disarm, 6000);
+        return;
+      }
+      clearTimeout(timer);
+      disarm();
+      run();
+    });
+  }
+
+  /* ---------- хранение ---------- */
+
+  function normalize(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter(function (x) { return x && typeof x.n === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x.d || ""); })
+      .map(function (x) {
+        return {
+          id: uid(),
+          n: x.n.slice(0, 60),
+          d: x.d,
+          t: /^\d{2}:\d{2}$/.test(x.t || "") ? x.t : null
+        };
+      });
+  }
+
+  function toPayload(items) {
+    return items.map(function (x) {
+      var o = { n: x.n, d: x.d };
+      if (x.t) o.t = x.t;
+      return o;
+    });
+  }
+
+  function encode(items) {
+    var bytes = new TextEncoder().encode(JSON.stringify(toPayload(items)));
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function decode(str) {
+    var b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  function hashParams() {
+    var out = {};
+    (location.hash || "").replace(/^#/, "").split("&").forEach(function (p) {
+      if (!p) return;
+      var i = p.indexOf("=");
+      if (i < 0) out[p] = "1"; else out[p.slice(0, i)] = p.slice(i + 1);
+    });
+    return out;
+  }
+
+  function load() {
+    var hp = hashParams();
+    state.fromLink = false;
+
+    if (hp.admin === "1") {
+      try { localStorage.setItem(ADMIN_KEY, "1"); } catch (e) {}
+    }
+    try { state.admin = localStorage.getItem(ADMIN_KEY) === "1"; } catch (e) { state.admin = hp.admin === "1"; }
+
+    if (hp.t) {
+      try {
+        var fromLink = normalize(decode(hp.t));
+        if (fromLink.length) { state.items = fromLink; state.fromLink = true; return; }
+      } catch (e) { /* битая ссылка — молча падаем на остальное */ }
+    }
+
+    try {
+      var saved = localStorage.getItem(KEY);
+      if (saved) {
+        var local = normalize(JSON.parse(saved));
+        if (local.length) { state.items = local; return; }
+      }
+    } catch (e) {}
+
+    state.items = normalize(DEFAULTS);
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(toPayload(state.items))); } catch (e) {}
+  }
+
+  /* ---------- отрисовка ---------- */
+
+  var nodes = {};   // id -> { num, unit, clock, figure }
+  var buckets = ""; // отпечаток раскладки, чтобы не перерисовывать каждую секунду
+
+  function makeRow(item, ahead, index) {
+    var li = document.createElement("li");
+    li.className = "row" + (ahead ? " ahead" : "");
+    li.style.animationDelay = Math.min(index, 8) * 45 + "ms";
+
+    var head = document.createElement("div");
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = item.n;
+    var when = document.createElement("span");
+    when.className = "when";
+    when.textContent = whenText(item);
+    var rough = document.createElement("span");
+    rough.className = "rough";
+    head.appendChild(name); head.appendChild(when); head.appendChild(rough);
+
+    var fig = document.createElement("div");
+    fig.className = "figure";
+    var num = document.createElement("span");
+    num.className = "num";
+    var unit = document.createElement("span");
+    unit.className = "unit";
+    var clock = document.createElement("span");
+    clock.className = "clock";
+    fig.appendChild(num); fig.appendChild(unit); fig.appendChild(clock);
+
+    var acts = document.createElement("div");
+    acts.className = "acts";
+    var ed = document.createElement("button");
+    ed.type = "button"; ed.textContent = "Править";
+    ed.setAttribute("aria-label", "Править: " + item.n);
+    ed.addEventListener("click", function () { openDialog(item); });
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "del"; del.textContent = "Удалить";
+    del.setAttribute("aria-label", "Удалить: " + item.n);
+    armTwoStep(del, "Удалить", "Точно?", function () { removeItem(item); });
+    acts.appendChild(ed); acts.appendChild(del);
+
+    li.appendChild(head); li.appendChild(fig); li.appendChild(acts);
+    nodes[item.id] = { num: num, unit: unit, clock: clock, rough: rough, figure: fig, row: li };
+    return li;
+  }
+
+  function render() {
+    var now = Date.now();
+    var ahead = [], past = [];
+    state.items.forEach(function (x) { (tsOf(x) > now ? ahead : past).push(x); });
+    ahead.sort(function (a, b) { return tsOf(a) - tsOf(b); });
+    past.sort(function (a, b) { return tsOf(b) - tsOf(a); });
+
+    var stamp = ahead.map(function (x) { return x.id; }).join(",") + "|" + past.map(function (x) { return x.id; }).join(",");
+    if (stamp === buckets) return;
+    buckets = stamp;
+    nodes = {};
+
+    var la = $("listAhead"), lp = $("listPast");
+    la.textContent = ""; lp.textContent = "";
+    ahead.forEach(function (x, i) { la.appendChild(makeRow(x, true, i)); });
+    past.forEach(function (x, i) { lp.appendChild(makeRow(x, false, i)); });
+
+    $("secAhead").hidden = ahead.length === 0;
+    $("secPast").hidden = past.length === 0;
+    $("emptyAll").hidden = state.items.length !== 0;
+  }
+
+  function tick() {
+    var now = Date.now();
+    render();
+
+    var d = new Date(now);
+    $("now").innerHTML = fmtDate.format(d).replace(/\s*г\.$/, "") + " " +
+      pad(d.getHours()) + '<span class="blink">:</span>' + pad(d.getMinutes());
+
+    state.items.forEach(function (item) {
+      var n = nodes[item.id];
+      if (!n) return;
+      var ts = tsOf(item);
+      var diff = Math.abs(ts - now);
+      var days = Math.floor(diff / 86400000);
+      var rest = diff % 86400000;
+      var hh = Math.floor(rest / 3600000);
+      var mm = Math.floor(rest % 3600000 / 60000);
+      var ss = Math.floor(rest % 60000 / 1000);
+      var hms = pad(hh) + ":" + pad(mm) + ":" + pad(ss);
+
+      if (days === 0) {
+        n.figure.classList.add("hms");
+        n.num.textContent = hms;
+        n.unit.textContent = ts > now ? "осталось" : "прошло";
+      } else {
+        n.figure.classList.remove("hms");
+        n.num.textContent = days;
+        n.unit.textContent = plural(days, ["день", "дня", "дней"]);
+        n.clock.textContent = hms;
+      }
+
+      n.rough.textContent = days >= 60
+        ? roughSpan(Math.min(ts, now), Math.max(ts, now))
+        : "";
+    });
+  }
+
+  /* ---------- редактор ---------- */
+
+  var dlg = $("dlg");
+
+  function openDialog(item) {
+    state.editing = item || null;
+    $("dlgTitle").textContent = item ? "Правка" : "Новый таймер";
+    $("fName").value = item ? item.n : "";
+    $("fDate").value = item ? item.d : "";
+    $("fTime").value = item && item.t ? item.t : "";
+    dlg.showModal();
+    setTimeout(function () { $("fName").focus(); }, 0);
+  }
+
+  $("editForm").addEventListener("submit", function () {
+    var name = $("fName").value.trim();
+    var date = $("fDate").value;
+    var time = $("fTime").value;
+    if (!name || !date) return;
+
+    if (state.editing) {
+      state.editing.n = name;
+      state.editing.d = date;
+      state.editing.t = time || null;
+    } else {
+      state.items.push({ id: uid(), n: name, d: date, t: time || null });
+    }
+    state.editing = null;
+    buckets = "";
+    save();
+    tick();
+    updateChrome();
+    toast("Сохранено");
+  });
+
+  $("cancelBtn").addEventListener("click", function () { state.editing = null; dlg.close(); });
+
+  function removeItem(item) {
+    state.items = state.items.filter(function (x) { return x !== item; });
+    buckets = "";
+    save();
+    tick();
+    updateChrome();
+    toast("Удалено: " + item.n);
+  }
+
+  /* ---------- админские действия ---------- */
+
+  var toastTimer = null;
+  function toast(msg) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove("on"); }, 2200);
+  }
+
+  var copyDlg = $("copyDlg");
+
+  function showCopyBox(text, title) {
+    $("copyTitle").textContent = title;
+    var box = $("copyBox");
+    box.value = text;
+    copyDlg.showModal();
+    box.focus();
+    box.select();
+  }
+
+  function copy(text, okMsg, fallbackTitle) {
+    var done = function () { toast(okMsg); };
+    var fail = function () { showCopyBox(text, fallbackTitle); };
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, fail);
+        return;
+      }
+    } catch (e) { /* провалимся в ручное копирование */ }
+    fail();
+  }
+
+  $("addBtn").addEventListener("click", function () { openDialog(null); });
+
+  $("linkBtn").addEventListener("click", function () {
+    var base = location.href.split("#")[0];
+    copy(base + "#t=" + encode(state.items), "Ссылка скопирована", "Ссылка для друзей");
+  });
+
+  $("jsonBtn").addEventListener("click", function () {
+    copy(JSON.stringify(toPayload(state.items), null, 2), "JSON скопирован", "JSON — кидай мне, я перевыложу");
+  });
+
+  armTwoStep($("resetBtn"), "Сброс", "Точно?", function () {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    if (location.hash) location.hash = state.admin ? "admin" : "";
+    state.items = normalize(DEFAULTS);
+    state.fromLink = false;
+    buckets = "";
+    tick();
+    updateChrome();
+    toast("Вернул опубликованный список");
+  });
+
+  $("lockBtn").addEventListener("click", function () {
+    try { localStorage.removeItem(ADMIN_KEY); } catch (e) {}
+    state.admin = false;
+    if (hashParams().admin) location.hash = "";
+    updateChrome();
+    toast("Админка выключена");
+  });
+
+  // Три клика по точке в подвале — запасной вход, если ссылки с #admin под рукой нет.
+  var clicks = 0, clickTimer = null;
+  $("secret").addEventListener("click", function () {
+    clicks += 1;
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(function () { clicks = 0; }, 700);
+    if (clicks >= 3) {
+      clicks = 0;
+      state.admin = true;
+      try { localStorage.setItem(ADMIN_KEY, "1"); } catch (e) {}
+      updateChrome();
+      toast("Админка включена");
+    }
+  });
+
+  function updateChrome() {
+    document.body.classList.toggle("is-admin", state.admin);
+    var note = "";
+    if (state.admin) {
+      note = state.fromLink ? "админ · список из ссылки"
+        : (localStorage.getItem(KEY) ? "админ · локальная копия" : "админ · опубликованный список");
+    }
+    $("footNote").textContent = note;
+  }
+
+  /* ---------- старт ---------- */
+
+  load();
+  updateChrome();
+  tick();
+  setInterval(tick, 1000);
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) tick();
+  });
+
+  // Смена хэша — это переход по чужой ссылке без перезагрузки: перечитываем список.
+  window.addEventListener("hashchange", function () {
+    load();
+    buckets = "";
+    updateChrome();
+    tick();
+  });
+})();
+</script>
+</body>
+</html>
