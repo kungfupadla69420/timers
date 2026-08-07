@@ -198,6 +198,7 @@
   .btn.save:hover{ filter:brightness(1.08); color:var(--accent-ink); }
   .btn.wide{ width:100%; text-align:center; }
   .share-opt{ display:flex; flex-direction:column; gap:9px; }
+  .hint.lead{ color:var(--ink); margin-bottom:-4px; }
   textarea.copybox{
     font:inherit; font-size:12px; line-height:1.5; color:var(--ink); background:var(--ground);
     border:1px solid var(--line); border-radius:9px; padding:11px 13px;
@@ -277,13 +278,14 @@
 <dialog id="shareDlg">
   <form method="dialog" class="edit">
     <div class="dlg-title">Поделиться</div>
+    <p class="hint lead">Всё, что ты меняешь в админке, остаётся в этом браузере. До друзей это доходит одним из двух способов.</p>
     <div class="share-opt">
-      <button type="button" class="btn wide" id="linkBtn">Скопировать ссылку для друзей</button>
-      <p class="hint">Список зашит прямо в ссылку — открывается у кого угодно, без аккаунтов. В уже разосланных ссылках останется прежний список.</p>
+      <button type="button" class="btn wide" id="linkBtn">Ссылка с сегодняшним списком</button>
+      <p class="hint">Работает сразу и без меня: кто откроет, увидит таймеры ровно как сейчас. Это снимок — добавишь новый таймер, придётся кинуть новую ссылку.</p>
     </div>
     <div class="share-opt">
-      <button type="button" class="btn wide" id="jsonBtn">Скопировать данные для публикации</button>
-      <p class="hint">Отдай их Клоду — он впишет список в страницу, и обновление увидят все по обычному адресу.</p>
+      <button type="button" class="btn wide" id="jsonBtn">Данные для Клода</button>
+      <p class="hint">Пришли их мне — впишу список в сам сайт. Тогда таймеры обновятся по обычному адресу, у всех, кому ты уже давал ссылку. Пересылать ничего не надо.</p>
     </div>
     <div class="dlg-acts">
       <div class="right"><button type="submit" class="btn">Закрыть</button></div>
