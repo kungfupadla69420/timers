@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Таймеры</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236B73FF'/%3E%3Cpath d='M16 8v8.5l5.5 3.2' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E" />
 <style>
   :root{
     color-scheme: light dark;
@@ -585,15 +586,36 @@
 
   /* ---------- общий список: чтение и публикация ---------- */
 
+  function fromB64(b64) {
+    var bin = atob(String(b64).replace(/\s+/g, ""));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  // Читаем через contents API: у него кэш 60 секунд против пяти минут у raw,
+  // поэтому опубликованное видно почти сразу. Без своих заголовков — иначе
+  // браузер потребует preflight. Raw остаётся запасным на случай лимита.
   function fetchShared(timeoutMs) {
-    var bust = RAW + "?t=" + Math.floor(performance.now()) + "_" + uid();
-    var net = fetch(bust, { cache: "no-store" }).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    }).then(function (raw) {
-      var list = normalize(raw);
-      return list.length || Array.isArray(raw) ? list : null;
+    var viaApi = fetch(API + "?ref=" + BRANCH, { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("api " + r.status);
+        return r.json();
+      })
+      .then(function (j) { return JSON.parse(fromB64(j.content)); });
+
+    var viaRaw = function () {
+      return fetch(RAW + "?t=" + Math.floor(Date.now() / 1000), { cache: "no-store" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("raw " + r.status);
+          return r.json();
+        });
+    };
+
+    var net = viaApi.catch(viaRaw).then(function (raw) {
+      return Array.isArray(raw) ? normalize(raw) : null;
     });
+
     var timer = new Promise(function (res) { setTimeout(function () { res(null); }, timeoutMs); });
     return Promise.race([net, timer]).catch(function () { return null; });
   }
