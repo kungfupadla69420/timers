@@ -180,7 +180,7 @@
   form.edit{ display:flex; flex-direction:column; gap:18px; padding:24px; }
   .dlg-title{ font-size:11px; text-transform:uppercase; letter-spacing:.22em; color:var(--muted); }
   label{ display:flex; flex-direction:column; gap:7px; font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); }
-  input[type="text"], input[type="date"], input[type="time"]{
+  input[type="text"], input[type="date"], input[type="time"], input[type="password"]{
     font:inherit; font-size:15px; color:var(--ink); background:var(--ground);
     border:1px solid var(--line); border-radius:9px; padding:11px 13px; width:100%; box-sizing:border-box;
   }
@@ -199,6 +199,8 @@
   .btn.wide{ width:100%; text-align:center; }
   .share-opt{ display:flex; flex-direction:column; gap:9px; }
   .hint.lead{ color:var(--ink); margin-bottom:-4px; }
+  .hint a{ color:var(--accent); text-underline-offset:2px; }
+  .hint b{ color:var(--ink); font-weight:600; }
   textarea.copybox{
     font:inherit; font-size:12px; line-height:1.5; color:var(--ink); background:var(--ground);
     border:1px solid var(--line); border-radius:9px; padding:11px 13px;
@@ -230,7 +232,8 @@
     <h1>Таймеры</h1>
     <div class="tools">
       <button type="button" class="primary" id="addBtn">+ Добавить</button>
-      <button type="button" id="shareBtn">Поделиться</button>
+      <button type="button" id="pubBtn">Опубликовать</button>
+      <button type="button" id="shareBtn">Ссылка</button>
       <button type="button" id="resetBtn">Сброс</button>
       <button type="button" id="lockBtn">Выйти</button>
     </div>
@@ -277,18 +280,33 @@
 
 <dialog id="shareDlg">
   <form method="dialog" class="edit">
-    <div class="dlg-title">Поделиться</div>
-    <p class="hint lead">Всё, что ты меняешь в админке, остаётся в этом браузере. До друзей это доходит одним из двух способов.</p>
+    <div class="dlg-title">Ссылка со снимком</div>
+    <p class="hint lead">Разовый способ показать список, ничего не публикуя: он зашит прямо в адрес.</p>
     <div class="share-opt">
-      <button type="button" class="btn wide" id="linkBtn">Ссылка с сегодняшним списком</button>
-      <p class="hint">Работает сразу и без меня: кто откроет, увидит таймеры ровно как сейчас. Это снимок — добавишь новый таймер, придётся кинуть новую ссылку.</p>
+      <button type="button" class="btn wide" id="linkBtn">Скопировать ссылку</button>
+      <p class="hint">Кто откроет — увидит таймеры ровно как сейчас. Это снимок: изменишь список, придётся кинуть новую ссылку. Чтобы обновилось у всех само — «Опубликовать».</p>
     </div>
     <div class="share-opt">
-      <button type="button" class="btn wide" id="jsonBtn">Данные для Клода</button>
-      <p class="hint">Пришли их мне — впишу список в сам сайт. Тогда таймеры обновятся по обычному адресу, у всех, кому ты уже давал ссылку. Пересылать ничего не надо.</p>
+      <button type="button" class="btn wide" id="jsonBtn">Скопировать данные списком</button>
+      <p class="hint">Запасной путь, если публикация не проходит: эти данные можно отдать Клоду, он впишет их в сайт.</p>
     </div>
     <div class="dlg-acts">
       <div class="right"><button type="submit" class="btn">Закрыть</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="tokenDlg">
+  <form method="dialog" class="edit" id="tokenForm">
+    <div class="dlg-title" id="tokenTitle">Ключ для публикации</div>
+    <p class="hint lead">Чтобы страница могла обновлять список у всех, ей нужен твой ключ GitHub. Он хранится только в этом браузере и уходит только на github.com.</p>
+    <label>Ключ
+      <input type="password" id="fToken" autocomplete="off" spellcheck="false" placeholder="github_pat_…" required />
+    </label>
+    <p class="hint">Создай <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">тонкий токен</a>: доступ — только репозиторий <b>timers</b>, право <b>Contents: Read and write</b>, срок на твой вкус. Больше ему ничего не нужно.</p>
+    <div class="dlg-acts">
+      <button type="button" class="btn" id="tokenCancel">Отмена</button>
+      <div class="right"><button type="submit" class="btn save">Сохранить и опубликовать</button></div>
     </div>
   </form>
 </dialog>
@@ -317,12 +335,22 @@
     { n: "Последняя Копань", d: "2025-08-17", t: null }
   ];
 
+  // Общий список живёт отдельным файлом в репозитории. Страница читает его
+  // напрямую с raw (обновляется сразу после коммита, не дожидаясь пересборки
+  // сайта), а кнопка «Опубликовать» пишет его туда же через GitHub API.
+  var REPO = "kungfupadla69420/timers";
+  var BRANCH = "main";
+  var DATA_PATH = "timers.json";
+  var RAW = "https://raw.githubusercontent.com/" + REPO + "/" + BRANCH + "/" + DATA_PATH;
+  var API = "https://api.github.com/repos/" + REPO + "/contents/" + DATA_PATH;
+
   var KEY = "timers.v1";
   var ADMIN_KEY = "timers.admin";
+  var TOKEN_KEY = "timers.token";
   var CELL = 1.1; // высота ячейки разряда, в em — держать в паре с --cell
 
   var $ = function (id) { return document.getElementById(id); };
-  var state = { items: [], admin: false, fromLink: false, editing: null };
+  var state = { items: [], admin: false, fromLink: false, draft: false, editing: null };
   var reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- утилиты ---------- */
@@ -510,9 +538,12 @@
     return out;
   }
 
+  // Синхронная часть: режим админа, ссылка, локальный черновик.
+  // Возвращает true, если список уже определён и общий файл тянуть не нужно.
   function load() {
     var hp = hashParams();
     state.fromLink = false;
+    state.draft = false;
 
     if (hp.admin === "1") {
       try { localStorage.setItem(ADMIN_KEY, "1"); } catch (e) {}
@@ -522,25 +553,99 @@
     if (hp.t) {
       try {
         var fromLink = normalize(decode(hp.t));
-        if (fromLink.length) { state.items = fromLink; state.fromLink = true; return; }
+        if (fromLink.length) { state.items = fromLink; state.fromLink = true; return true; }
       } catch (e) { /* битая ссылка — молча падаем на остальное */ }
     }
 
-    // Пустой сохранённый список — тоже осознанный выбор владельца, а не «нет данных»:
-    // иначе удалённые таймеры воскресали бы после перезагрузки.
-    try {
-      var saved = localStorage.getItem(KEY);
-      if (saved !== null) {
-        var parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) { state.items = normalize(parsed); return; }
-      }
-    } catch (e) {}
+    // Локальный список — это неопубликованный черновик владельца. Он старше
+    // общего файла по приоритету, иначе правки пропадали бы при перезагрузке.
+    var local = readLocal();
+    if (local) { state.items = local; state.draft = true; return true; }
 
     state.items = normalize(DEFAULTS);
+    return false;
   }
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(toPayload(state.items))); } catch (e) {}
+  }
+
+  function readLocal() {
+    try {
+      var saved = localStorage.getItem(KEY);
+      if (saved === null) return null;
+      var parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? normalize(parsed) : null;
+    } catch (e) { return null; }
+  }
+
+  function dropLocal() {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+  }
+
+  /* ---------- общий список: чтение и публикация ---------- */
+
+  function fetchShared(timeoutMs) {
+    var bust = RAW + "?t=" + Math.floor(performance.now()) + "_" + uid();
+    var net = fetch(bust, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (raw) {
+      var list = normalize(raw);
+      return list.length || Array.isArray(raw) ? list : null;
+    });
+    var timer = new Promise(function (res) { setTimeout(function () { res(null); }, timeoutMs); });
+    return Promise.race([net, timer]).catch(function () { return null; });
+  }
+
+  function getToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function b64(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function ghHeaders(token) {
+    return {
+      "Authorization": "Bearer " + token,
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+  }
+
+  // Возвращает {ok:true} либо {ok:false, code, msg}.
+  function publish(token) {
+    var head = ghHeaders(token);
+    var body = JSON.stringify(toPayload(state.items), null, 2) + "\n";
+
+    return fetch(API + "?ref=" + BRANCH, { headers: head, cache: "no-store" })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) return { bad: r.status };
+        if (r.status === 404) return { sha: null };          // файла ещё нет — создадим
+        if (!r.ok) return { bad: r.status };
+        return r.json().then(function (j) { return { sha: j.sha }; });
+      })
+      .then(function (info) {
+        if (info.bad) return { ok: false, code: info.bad };
+        var payload = {
+          message: "Таймеры: обновление списка из админки",
+          content: b64(body),
+          branch: BRANCH
+        };
+        if (info.sha) payload.sha = info.sha;
+        return fetch(API, { method: "PUT", headers: head, body: JSON.stringify(payload) })
+          .then(function (r) {
+            if (r.ok) return { ok: true };
+            return r.json().catch(function () { return {}; }).then(function (j) {
+              return { ok: false, code: r.status, msg: j && j.message };
+            });
+          });
+      })
+      .catch(function (e) { return { ok: false, code: 0, msg: String(e) }; });
   }
 
   /* ---------- отрисовка ---------- */
@@ -698,6 +803,7 @@
       state.items.push({ id: uid(), n: name, d: date, t: time || null });
     }
     state.editing = null;
+    state.draft = true;
     buckets = "";
     save();
     tick();
@@ -709,6 +815,7 @@
 
   function removeItem(item) {
     state.items = state.items.filter(function (x) { return x !== item; });
+    state.draft = true;
     buckets = "";
     save();
     tick();
@@ -755,6 +862,56 @@
   var shareDlg = $("shareDlg");
   $("shareBtn").addEventListener("click", function () { shareDlg.showModal(); });
 
+  /* --- публикация --- */
+
+  var tokenDlg = $("tokenDlg");
+  var pubBtn = $("pubBtn");
+
+  function askToken(reason) {
+    $("tokenTitle").textContent = reason || "Ключ для публикации";
+    $("fToken").value = "";
+    tokenDlg.showModal();
+    setTimeout(function () { $("fToken").focus(); }, 0);
+  }
+
+  function runPublish(token) {
+    pubBtn.disabled = true;
+    pubBtn.textContent = "Публикую…";
+    return publish(token).then(function (res) {
+      pubBtn.disabled = false;
+      pubBtn.textContent = "Опубликовать";
+      if (res.ok) {
+        dropLocal();            // черновик стал общим списком
+        state.draft = false;
+        updateChrome();
+        toast("Опубликовано — у всех обновится за пару секунд");
+        return;
+      }
+      if (res.code === 401 || res.code === 403) {
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        askToken("Ключ не подошёл — нужен новый");
+        return;
+      }
+      toast(res.code ? "Не опубликовалось (" + res.code + ")" : "Не опубликовалось: нет сети");
+    });
+  }
+
+  pubBtn.addEventListener("click", function () {
+    var token = getToken();
+    if (!token) { askToken(); return; }
+    runPublish(token);
+  });
+
+  $("tokenForm").addEventListener("submit", function () {
+    var token = $("fToken").value.trim();
+    if (!token) return;
+    try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    $("fToken").value = "";
+    runPublish(token);
+  });
+
+  $("tokenCancel").addEventListener("click", function () { $("fToken").value = ""; tokenDlg.close(); });
+
   $("linkBtn").addEventListener("click", function () {
     var base = location.href.split("#")[0];
     shareDlg.close();
@@ -767,13 +924,11 @@
   });
 
   armTwoStep($("resetBtn"), "Сброс", "Точно?", function () {
-    try { localStorage.removeItem(KEY); } catch (e) {}
-    if (location.hash) location.hash = state.admin ? "admin" : "";
-    state.items = normalize(DEFAULTS);
-    state.fromLink = false;
+    dropLocal();
+    if (location.hash) { location.hash = state.admin ? "admin" : ""; }
     buckets = "";
-    tick();
-    updateChrome();
+    firstPaint = true;
+    boot();
     toast("Вернул опубликованный список");
   });
 
@@ -789,19 +944,31 @@
     document.body.classList.toggle("is-admin", state.admin);
     var note = "";
     if (state.admin) {
-      var local = null;
-      try { local = localStorage.getItem(KEY); } catch (e) {}
       note = state.fromLink ? "админ · список из ссылки"
-        : (local ? "админ · локальная копия" : "админ · опубликованный список");
+        : (state.draft ? "админ · есть неопубликованные правки"
+                       : "админ · то же, что видят все");
     }
     $("footNote").textContent = note;
   }
 
   /* ---------- старт ---------- */
 
-  load();
-  updateChrome();
-  tick();
+  function boot() {
+    var settled = load();
+    updateChrome();
+    tick();
+    if (settled) return;
+    // Ни ссылки, ни черновика — показываем общий список, как его видят все.
+    fetchShared(2500).then(function (shared) {
+      if (!shared) return;                       // сеть молчит — остаёмся на вшитом
+      state.items = shared;
+      buckets = "";
+      firstPaint = true;
+      tick();
+    });
+  }
+
+  boot();
   setInterval(tick, 1000);
 
   document.addEventListener("visibilitychange", function () {
@@ -810,11 +977,9 @@
 
   // Смена хэша — это переход по чужой ссылке без перезагрузки: перечитываем список.
   window.addEventListener("hashchange", function () {
-    load();
     buckets = "";
     firstPaint = true;
-    updateChrome();
-    tick();
+    boot();
   });
 })();
 </script>
