@@ -954,12 +954,17 @@
     toast("Вернул опубликованный список");
   });
 
-  $("lockBtn").addEventListener("click", function () {
-    try { localStorage.removeItem(ADMIN_KEY); } catch (e) {}
+  // Выход уносит и ключ: иначе на общем устройстве следующий человек дописал бы
+  // #admin и опубликовал что угодно уже сохранённым ключом.
+  armTwoStep($("lockBtn"), "Выйти", "Точно?", function () {
+    try {
+      localStorage.removeItem(ADMIN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
     state.admin = false;
     if (hashParams().admin) location.hash = "";
     updateChrome();
-    toast("Админка выключена");
+    toast("Админка выключена, ключ забыт");
   });
 
   function updateChrome() {
@@ -969,6 +974,7 @@
       note = state.fromLink ? "админ · список из ссылки"
         : (state.draft ? "админ · есть неопубликованные правки"
                        : "админ · то же, что видят все");
+      if (getToken()) note += " · ключ на этом устройстве";
     }
     $("footNote").textContent = note;
   }
